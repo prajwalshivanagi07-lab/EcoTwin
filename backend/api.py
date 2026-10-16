@@ -29,13 +29,31 @@ DB_PATH = ROOT / "ecotwin.db"
 
 app = FastAPI(title="EcoTwin Campus API", version="1.4.0")
 
+# CORS: allow local development and the deployed Vercel frontend.
+# IMPORTANT: replace the placeholder with your actual Vercel domain.
+VERCEL_FRONTEND_URL = (
+    "https://eco-twin-dsu.vercel.app"
+)
+
+ALLOWED_ORIGINS = (
+    [
+        f"http://localhost:{port}"
+        for port in range(5170, 5180)
+    ]
+    + [
+        f"http://127.0.0.1:{port}"
+        for port in range(5170, 5180)
+    ]
+    + [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        VERCEL_FRONTEND_URL,
+    ]
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        f"http://localhost:{port}" for port in range(5170, 5180)
-    ] + [
-        f"http://127.0.0.1:{port}" for port in range(5170, 5180)
-    ],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
     allow_headers=["Content-Type", "X-Admin-Key"],
@@ -113,7 +131,6 @@ def ensure_campus_care_tables():
             )
         """)
 
-        # Add used_at to existing databases without deleting records.
         columns = {
             row["name"]
             for row in conn.execute(
@@ -177,7 +194,7 @@ def read_rows(limit: int | None = None):
 
 
 def require_admin(admin_key: str | None):
-    """Protect staff actions with the configured local demo key."""
+    """Protect staff actions with the configured admin key."""
     expected = os.getenv("ECOTWIN_ADMIN_KEY", "")
 
     if not expected:
