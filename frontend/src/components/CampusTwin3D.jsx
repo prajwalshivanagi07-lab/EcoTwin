@@ -1,3 +1,4 @@
+
 import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Html, OrbitControls, ContactShadows } from '@react-three/drei';
@@ -8,7 +9,6 @@ import './CampusTwin3D.css';
 const SCALE = 0.56;
 const toX = (n) => (n - 50) * SCALE;
 const toZ = (n) => (50 - n) * SCALE;
-const center = (x0, y0, x1, y1) => [(x0 + x1) / 2, (y0 + y1) / 2];
 
 const BUILDINGS = [
   { name: 'A Block / School of Engineering', short: 'A BLOCK · SOE', box: [59, 77, 69, 84], color: '#9caeaa', height: 4.5, floors: 5, category: 'academic', aliases: ['A Block - SOE', 'A Block - School of Engineering', 'A Block', 'School of Engineering', 'SOE', 'Engineering Block'] },
@@ -43,7 +43,6 @@ const SPORTS = [
   { name: 'Pickleball Court 2', box: [85, 37.5, 89, 39.5], type: 'court', aliases: ['Pickleball Courts', 'Pickleball Court 2'] },
 ];
 
-// The paths below are intentionally transcribed from campus_map.py.
 const ROADS = [
   { width: 1.05, points: [[13,0],[16,12],[23,24],[30,36],[38,48],[45,60],[53,72],[60,85],[65,100]] },
   { width: .72, points: [[38,48],[43,45],[48,40],[52,34]] },
@@ -63,44 +62,67 @@ const ROADS = [
 function makeReadingLookup(rows) {
   const map = new Map();
   const normalize = (s) => String(s ?? '').toLowerCase().trim().replace(/\s+/g, ' ');
+
   for (const row of rows || []) {
     const key = normalize(row.building ?? row.building_key ?? row.name);
+
     if (key) {
       const previous = map.get(key);
       const t = Date.parse(row.timestamp || '') || 0;
       const pt = Date.parse(previous?.timestamp || '') || 0;
+
       if (!previous || t >= pt) map.set(key, row);
     }
   }
+
   return { map, normalize };
 }
 
 function findReading(building, lookup) {
-  const aliases = (building.aliases || [building.name]).map(lookup.normalize).filter(Boolean);
-  const exactRows = aliases.map((alias) => lookup.map.get(alias)).filter(Boolean);
+  const aliases = (building.aliases || [building.name])
+    .map(lookup.normalize)
+    .filter(Boolean);
+
+  const exactRows = aliases
+    .map((alias) => lookup.map.get(alias))
+    .filter(Boolean);
+
   if (exactRows.length) {
-    return exactRows.reduce((best, row) => (Date.parse(row.timestamp || '') || 0) >= (Date.parse(best.timestamp || '') || 0) ? row : best);
+    return exactRows.reduce((best, row) =>
+      (Date.parse(row.timestamp || '') || 0) >=
+      (Date.parse(best.timestamp || '') || 0) ? row : best
+    );
   }
-  // Prefer the most specific partial building-name match; break ties by latest timestamp.
+
   let winner = null;
   let bestScore = -1;
+
   for (const [key, row] of lookup.map) {
     for (const alias of aliases) {
       if (!alias || !(key.includes(alias) || alias.includes(key))) continue;
-      const score = Math.min(alias.length, key.length) * 100 + Math.min(alias.length, key.length) / Math.max(alias.length, key.length);
+
+      const score =
+        Math.min(alias.length, key.length) * 100 +
+        Math.min(alias.length, key.length) / Math.max(alias.length, key.length);
+
       const currentTime = Date.parse(row.timestamp || '') || 0;
       const winnerTime = Date.parse(winner?.timestamp || '') || 0;
+
       if (score > bestScore || (score === bestScore && currentTime > winnerTime)) {
         bestScore = score;
         winner = row;
       }
     }
   }
+
   return winner;
 }
 
 function formatValue(value, unit = '') {
-  if (value === null || value === undefined || value === '' || Number.isNaN(Number(value))) return 'N/A';
+  if (value === null || value === undefined || value === '' || Number.isNaN(Number(value))) {
+    return 'N/A';
+  }
+
   return `${Number(value).toLocaleString(undefined, { maximumFractionDigits: 1 })}${unit}`;
 }
 
@@ -110,16 +132,32 @@ function SensorPin({ item, reading, onSelect }) {
   const x = toX((x0 + x1) / 2);
   const z = toZ((y0 + y1) / 2);
   const buildingTop = (item.height || 2.5) + 0.25;
+
   return (
     <group position={[x, buildingTop, z]}>
       <mesh
-        onPointerOver={(event) => { event.stopPropagation(); setHover(true); document.body.style.cursor = 'pointer'; }}
-        onPointerOut={() => { setHover(false); document.body.style.cursor = 'auto'; }}
-        onClick={(event) => { event.stopPropagation(); onSelect(item); }}
+        onPointerOver={(event) => {
+          event.stopPropagation();
+          setHover(true);
+          document.body.style.cursor = 'pointer';
+        }}
+        onPointerOut={() => {
+          setHover(false);
+          document.body.style.cursor = 'auto';
+        }}
+        onClick={(event) => {
+          event.stopPropagation();
+          onSelect(item);
+        }}
       >
         <sphereGeometry args={[0.22, 18, 18]} />
-        <meshStandardMaterial color={reading ? '#f2cc62' : '#d6ded4'} emissive={reading ? '#8e6f20' : '#3a453b'} emissiveIntensity={0.5} />
+        <meshStandardMaterial
+          color={reading ? '#f2cc62' : '#d6ded4'}
+          emissive={reading ? '#8e6f20' : '#3a453b'}
+          emissiveIntensity={0.5}
+        />
       </mesh>
+
       {(hover || item.selected) && (
         <Html distanceFactor={14} position={[0, 0.42, 0]} center zIndexRange={[100, 0]}>
           <div className="ct3d-tooltip">
@@ -152,32 +190,47 @@ function Building({ item, reading, selected, onSelect }) {
   const floorCount = item.floors || 2;
   const windowColor = item.category === 'hostel' ? '#e6d6c4' : '#d8e5df';
   const isSelected = selected === item.name;
+
   return (
-    <group position={[x, 0, z]} onClick={(e) => { e.stopPropagation(); onSelect(item); }}
-      onPointerOver={(e) => { e.stopPropagation(); setHover(true); document.body.style.cursor = 'pointer'; }}
-      onPointerOut={() => { setHover(false); document.body.style.cursor = 'auto'; }}>
-      {/* Ground apron */}
+    <group
+      position={[x, 0, z]}
+      onClick={(e) => {
+        e.stopPropagation();
+        onSelect(item);
+      }}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setHover(true);
+        document.body.style.cursor = 'pointer';
+      }}
+      onPointerOut={() => {
+        setHover(false);
+        document.body.style.cursor = 'auto';
+      }}
+    >
       <mesh position={[0, 0.08, 0]} receiveShadow>
         <boxGeometry args={[width + 0.24, 0.12, depth + 0.24]} />
         <meshStandardMaterial color={isSelected ? '#d5d1ad' : '#b8c4b0'} roughness={0.94} />
       </mesh>
-      {/* Main building mass */}
+
       <mesh position={[0, h / 2 + 0.15, 0]} castShadow receiveShadow>
         <boxGeometry args={[width, h, depth]} />
         <meshStandardMaterial color={isSelected ? '#d8d8bf' : item.color} roughness={0.83} metalness={0.02} />
       </mesh>
-      {/* Flat roof and small rooftop service block */}
+
       <mesh position={[0, h + 0.2, 0]} castShadow>
         <boxGeometry args={[width + 0.08, 0.16, depth + 0.08]} />
         <meshStandardMaterial color={item.category === 'hostel' ? '#988c7c' : '#8f9b92'} roughness={0.9} />
       </mesh>
+
       <mesh position={[width * 0.14, h + 0.34, -depth * 0.08]} castShadow>
         <boxGeometry args={[Math.max(0.18, width * 0.25), 0.22, Math.max(0.16, depth * 0.24)]} />
         <meshStandardMaterial color="#8f9991" roughness={0.9} />
       </mesh>
-      {/* Front-facing window bands */}
+
       {Array.from({ length: Math.min(floorCount, 10) }).map((_, i) => {
         const wy = 0.38 + i * (h / floorCount);
+
         return (
           <mesh key={`win-${i}`} position={[0, wy, depth / 2 + 0.008]}>
             <boxGeometry args={[Math.max(0.12, width * 0.76), Math.max(0.045, h / floorCount * 0.28), 0.018]} />
@@ -185,13 +238,14 @@ function Building({ item, reading, selected, onSelect }) {
           </mesh>
         );
       })}
-      {/* Short vertical facade fins add a less-blocky architectural rhythm */}
+
       {width > 2.2 && [-0.32, 0.32].map((factor, i) => (
         <mesh key={`fin-${i}`} position={[width * factor, h / 2 + 0.15, depth / 2 + 0.02]}>
           <boxGeometry args={[0.06, h * 0.92, 0.04]} />
           <meshStandardMaterial color="#7c8f86" roughness={0.8} />
         </mesh>
       ))}
+
       {(hover || isSelected) && (
         <Html position={[0, h + 0.85, 0]} center distanceFactor={18} zIndexRange={[90, 0]}>
           <div className="ct3d-nameplate">{item.name}</div>
@@ -210,59 +264,85 @@ function SportsArea({ item, onSelect, selected }) {
   const court = item.type === 'court';
   const fieldColor = item.type === 'cricket' ? '#89a87a' : '#739d6d';
   const [hover, setHover] = useState(false);
+
   return (
-    <group position={[x, 0, z]} onClick={(e) => { e.stopPropagation(); onSelect(item); }}
-      onPointerOver={(e) => { e.stopPropagation(); setHover(true); document.body.style.cursor = 'pointer'; }}
-      onPointerOut={() => { setHover(false); document.body.style.cursor = 'auto'; }}>
+    <group
+      position={[x, 0, z]}
+      onClick={(e) => {
+        e.stopPropagation();
+        onSelect(item);
+      }}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setHover(true);
+        document.body.style.cursor = 'pointer';
+      }}
+      onPointerOut={() => {
+        setHover(false);
+        document.body.style.cursor = 'auto';
+      }}
+    >
       <mesh position={[0, 0.14, 0]} castShadow receiveShadow>
         <boxGeometry args={[w + (court ? 0.12 : 0.24), 0.2, d + (court ? 0.12 : 0.24)]} />
         <meshStandardMaterial color={selected === item.name ? '#c8d6a9' : '#b3c4a9'} roughness={0.95} />
       </mesh>
+
       <mesh position={[0, 0.26, 0]} receiveShadow>
         <boxGeometry args={[w, 0.06, d]} />
         <meshStandardMaterial color={court ? '#b96f58' : fieldColor} roughness={0.95} />
       </mesh>
-      {court && <>
-        <mesh position={[0, 0.3, 0]}>
-          <boxGeometry args={[w * 0.84, 0.012, d * 0.82]} />
-          <meshStandardMaterial color="#f0e9d6" />
+
+      {court && (
+        <>
+          <mesh position={[0, 0.3, 0]}>
+            <boxGeometry args={[w * 0.84, 0.012, d * 0.82]} />
+            <meshStandardMaterial color="#f0e9d6" />
+          </mesh>
+          <mesh position={[0, 0.312, 0]}>
+            <boxGeometry args={[0.025, 0.01, d * 0.82]} />
+            <meshStandardMaterial color="#e7dcff" />
+          </mesh>
+          <mesh position={[0, 0.318, 0]}>
+            <boxGeometry args={[w * 0.84, 0.01, 0.02]} />
+            <meshStandardMaterial color="#e7dcff" />
+          </mesh>
+        </>
+      )}
+
+      {item.type === 'football' && (
+        <>
+          <mesh position={[0, 0.3, 0]}>
+            <boxGeometry args={[w * 0.88, 0.012, d * 0.86]} />
+            <meshStandardMaterial color="#d8c9ff" />
+          </mesh>
+          <mesh position={[0, 0.31, 0]}>
+            <boxGeometry args={[0.025, 0.012, d * 0.86]} />
+            <meshStandardMaterial color="#d8c9ff" />
+          </mesh>
+          <mesh position={[0, 0.32, 0]}>
+            <cylinderGeometry args={[w * 0.12, w * 0.12, 0.014, 24]} />
+            <meshStandardMaterial color="#d8c9ff" />
+          </mesh>
+        </>
+      )}
+
+      {item.type === 'cricket' && (
+        <mesh position={[0, 0.3, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[Math.min(w, d) * 0.2, 32]} />
+          <meshStandardMaterial color="#9c67b1" />
         </mesh>
-        <mesh position={[0, 0.312, 0]}>
-          <boxGeometry args={[0.025, 0.01, d * 0.82]} />
-          <meshStandardMaterial color="#e7dcff" />
-        </mesh>
-        <mesh position={[0, 0.318, 0]}>
-          <boxGeometry args={[w * 0.84, 0.01, 0.02]} />
-          <meshStandardMaterial color="#e7dcff" />
-        </mesh>
-      </>}
-      {item.type === 'football' && <>
-        <mesh position={[0, 0.3, 0]}>
-          <boxGeometry args={[w * 0.88, 0.012, d * 0.86]} />
-          <meshStandardMaterial color="#d8c9ff" />
-        </mesh>
-        <mesh position={[0, 0.31, 0]}>
-          <boxGeometry args={[0.025, 0.012, d * 0.86]} />
-          <meshStandardMaterial color="#d8c9ff" />
-        </mesh>
-        <mesh position={[0, 0.32, 0]}>
-          <cylinderGeometry args={[w * 0.12, w * 0.12, 0.014, 24]} />
-          <meshStandardMaterial color="#d8c9ff" />
-        </mesh>
-      </>}
-      {item.type === 'cricket' && <mesh position={[0, 0.3, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[Math.min(w, d) * 0.2, 32]} />
-        <meshStandardMaterial color="#9c67b1" />
-      </mesh>}
-      {(hover || selected === item.name) && <Html position={[0, 0.75, 0]} center distanceFactor={18}>
-        <div className="ct3d-nameplate">{item.name}</div>
-      </Html>}
+      )}
+
+      {(hover || selected === item.name) && (
+        <Html position={[0, 0.75, 0]} center distanceFactor={18}>
+          <div className="ct3d-nameplate">{item.name}</div>
+        </Html>
+      )}
     </group>
   );
 }
 
-// Build a flat ribbon mesh along a path. TubeGeometry creates a circular cross-section,
-// which makes roads look like raised pipes/tunnels in a top-down campus scene.
+// Build a flat road ribbon along each path.
 function createRoadRibbon(curve, fullWidth, divisions, y) {
   const positions = [];
   const indices = [];
@@ -276,7 +356,6 @@ function createRoadRibbon(curve, fullWidth, divisions, y) {
     const perpZ = tangent.x / length;
     const half = fullWidth / 2;
 
-    // Two vertices form the left and right edge of the road at each sample.
     positions.push(point.x + perpX * half, y, point.z + perpZ * half);
     positions.push(point.x - perpX * half, y, point.z - perpZ * half);
 
@@ -285,7 +364,6 @@ function createRoadRibbon(curve, fullWidth, divisions, y) {
       const b = a + 1;
       const c = a + 2;
       const d = a + 3;
-      // Face winding points upward; double-sided material handles curved turns cleanly.
       indices.push(a, c, b, b, c, d);
     }
   }
@@ -294,6 +372,7 @@ function createRoadRibbon(curve, fullWidth, divisions, y) {
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
+
   return geometry;
 }
 
@@ -302,6 +381,7 @@ function RoadRibbon({ road, index }) {
     const points = road.points.map(([x, y]) => new THREE.Vector3(toX(x), 0, toZ(y)));
     const curve = new THREE.CatmullRomCurve3(points, false, 'centripetal');
     const divisions = Math.max(48, road.points.length * 16);
+
     return {
       shoulder: createRoadRibbon(curve, road.width + 0.22, divisions, 0.012),
       surface: createRoadRibbon(curve, road.width, divisions, 0.028),
@@ -327,42 +407,64 @@ function RoadRibbon({ road, index }) {
 
 function CampusScene({ readings, selected, setSelected }) {
   const lookup = useMemo(() => makeReadingLookup(readings), [readings]);
-  const buildingWithReadings = useMemo(() => BUILDINGS.map((item) => ({ ...item, reading: findReading(item, lookup), selected: selected === item.name })), [lookup, selected]);
-  const sportsWithReadings = useMemo(() => SPORTS.map((item) => ({ ...item, reading: findReading({ ...item, aliases: item.aliases || [item.name] }, lookup) })), [lookup]);
+
+  const buildingWithReadings = useMemo(
+    () => BUILDINGS.map((item) => ({
+      ...item,
+      reading: findReading(item, lookup),
+      selected: selected === item.name,
+    })),
+    [lookup, selected]
+  );
+
+  const sportsWithReadings = useMemo(
+    () => SPORTS.map((item) => ({
+      ...item,
+      reading: findReading({ ...item, aliases: item.aliases || [item.name] }, lookup),
+    })),
+    [lookup]
+  );
 
   return (
     <>
       <color attach="background" args={['#0c0e2a']} />
       <fog attach="fog" args={['#0c0e2a', 44, 95]} />
+
       <ambientLight intensity={1.25} />
       <hemisphereLight args={['#e5d8ff', '#201536', 1.25]} />
-      <directionalLight position={[-12, 24, 8]} intensity={1.8} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} />
+      <directionalLight
+        position={[-12, 24, 8]}
+        intensity={1.8}
+        castShadow
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+      />
       <directionalLight position={[10, 12, -10]} intensity={0.55} />
 
-      {/* Terrain plate */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.08, 0]} receiveShadow>
         <planeGeometry args={[58, 58]} />
         <meshStandardMaterial color="#17142f" roughness={1} />
       </mesh>
+
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.04, 0]}>
         <planeGeometry args={[56.8, 56.8]} />
         <meshStandardMaterial color="#1b1738" roughness={1} />
       </mesh>
 
-      {/* Flat road ribbons follow the original paths without cylindrical/tunnel geometry */}
-      {ROADS.map((road, i) => <RoadRibbon key={`road-${i}`} road={road} index={i} />)}
+      {ROADS.map((road, i) => (
+        <RoadRibbon key={`road-${i}`} road={road} index={i} />
+      ))}
 
-      {/* Pond approximates the original water-body footprint */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[toX(50), 0.035, toZ(12)]} receiveShadow>
         <circleGeometry args={[2.65, 64]} />
         <meshStandardMaterial color="#624b91" roughness={0.32} metalness={0.08} />
       </mesh>
+
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[toX(50), 0.04, toZ(12)]}>
         <ringGeometry args={[2.35, 2.48, 64]} />
         <meshStandardMaterial color="#b7a0ff" roughness={0.4} />
       </mesh>
 
-      {/* Light landscaped strips around academic zones */}
       {[[62,79,9,8],[53,58,11,9],[66,43,12,10],[82,60,17,26],[37,12,24,15]].map(([cx,cy,w,d], i) => (
         <mesh key={`land-${i}`} rotation={[-Math.PI/2,0,0]} position={[toX(cx),0.02,toZ(cy)]} receiveShadow>
           <planeGeometry args={[w*SCALE,d*SCALE]} />
@@ -370,29 +472,74 @@ function CampusScene({ readings, selected, setSelected }) {
         </mesh>
       ))}
 
-      {sportsWithReadings.map((item) => <SportsArea key={item.name} item={item} selected={selected} onSelect={(x) => setSelected(x.name)} />)}
-      {buildingWithReadings.map((item) => <Building key={item.name} item={item} reading={item.reading} selected={selected} onSelect={(x) => setSelected(x.name)} />)}
+      {sportsWithReadings.map((item) => (
+        <SportsArea
+          key={item.name}
+          item={item}
+          selected={selected}
+          onSelect={(x) => setSelected(x.name)}
+        />
+      ))}
 
-      {/* High visibility sensor dots also work when a reading exists for a sport facility */}
-      {buildingWithReadings.filter((x) => x.reading).map((item) => <SensorPin key={`sensor-${item.name}`} item={item} reading={item.reading} onSelect={(x) => setSelected(x.name)} />)}
-      {sportsWithReadings.filter((x) => x.reading).map((item) => <SensorPin key={`sensor-${item.name}`} item={{ ...item, height: 0.5 }} reading={item.reading} onSelect={(x) => setSelected(x.name)} />)}
+      {buildingWithReadings.map((item) => (
+        <Building
+          key={item.name}
+          item={item}
+          reading={item.reading}
+          selected={selected}
+          onSelect={(x) => setSelected(x.name)}
+        />
+      ))}
 
-      {/* Roadside labels */}
+      {buildingWithReadings.filter((x) => x.reading).map((item) => (
+        <SensorPin
+          key={`sensor-${item.name}`}
+          item={item}
+          reading={item.reading}
+          onSelect={(x) => setSelected(x.name)}
+        />
+      ))}
+
+      {sportsWithReadings.filter((x) => x.reading).map((item) => (
+        <SensorPin
+          key={`sensor-${item.name}`}
+          item={{ ...item, height: 0.5 }}
+          reading={item.reading}
+          onSelect={(x) => setSelected(x.name)}
+        />
+      ))}
+
       <Html position={[toX(27), 0.18, toZ(35)]} rotation={[0, 0.9, 0]} center distanceFactor={25}>
         <div className="ct3d-road-label">CAMPUS HIGHWAY</div>
       </Html>
 
       <ContactShadows position={[0, -0.02, 0]} opacity={0.24} scale={60} blur={2.2} far={24} resolution={512} />
-      <OrbitControls makeDefault target={[0, 0.5, 0]} minDistance={18} maxDistance={63} maxPolarAngle={Math.PI / 2.08} minPolarAngle={0.2} enableDamping dampingFactor={0.08} />
+
+      <OrbitControls
+        makeDefault
+        target={[0, 0.5, 0]}
+        minDistance={18}
+        maxDistance={63}
+        maxPolarAngle={Math.PI / 2.08}
+        minPolarAngle={0.2}
+        enableDamping
+        dampingFactor={0.08}
+      />
     </>
   );
 }
 
 /**
- * Interactive 3D campus model. Fetches live rows from the accompanying Python API.
- * For custom app state, pass readings={array} and the component will use those rows.
+ * Interactive 3D campus model.
+ * Reads live sensor data from the configured API, unless readings are supplied by the parent.
  */
-export default function CampusTwin3D({ readings: suppliedReadings, dataMode = 'database', apiStatus: suppliedApiStatus, lastUpdated: suppliedLastUpdated, apiUrl = 'http://127.0.0.1:8000/api/readings' }) {
+export default function CampusTwin3D({
+  readings: suppliedReadings,
+  dataMode = 'database',
+  apiStatus: suppliedApiStatus,
+  lastUpdated: suppliedLastUpdated,
+  apiUrl = 'https://ecotwin-bkfb.onrender.com/api/readings',
+}) {
   const [fetchedReadings, setFetchedReadings] = useState([]);
   const [apiStatus, setApiStatus] = useState('connecting');
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -400,34 +547,87 @@ export default function CampusTwin3D({ readings: suppliedReadings, dataMode = 'd
   const [view, setView] = useState('orbit');
 
   useEffect(() => {
-    if (suppliedReadings) return undefined;
+    if (suppliedReadings !== undefined && suppliedReadings !== null) {
+      return undefined;
+    }
+
     let active = true;
+    let loading = false;
+    let timer;
+
     const load = async () => {
+      if (loading || !active) return;
+
+      loading = true;
       try {
-        const response = await fetch(apiUrl, { cache: 'no-store' });
-        if (!response.ok) throw new Error(`API returned ${response.status}`);
+        const response = await fetch(apiUrl, {
+          cache: 'no-store',
+          headers: { Accept: 'application/json' },
+        });
+
+        if (!response.ok) {
+          throw new Error(`API returned ${response.status}`);
+        }
+
         const payload = await response.json();
-        const rows = Array.isArray(payload) ? payload : (payload.readings || payload.data || []);
+
+        const rows = Array.isArray(payload)
+          ? payload
+          : Array.isArray(payload?.readings)
+            ? payload.readings
+            : Array.isArray(payload?.data)
+              ? payload.data
+              : null;
+
+        if (!rows) {
+          throw new Error('Unexpected API response format');
+        }
+
         if (!active) return;
+
         setFetchedReadings(rows);
         setApiStatus('connected');
-        setLastUpdated(payload.updatedAt || payload.updated_at || new Date().toISOString());
+        setLastUpdated(
+          payload?.updatedAt ||
+          payload?.updated_at ||
+          new Date().toISOString()
+        );
       } catch (error) {
         if (!active) return;
+
+        console.error('CampusTwin3D API error:', error);
         setApiStatus('offline');
+      } finally {
+        loading = false;
       }
     };
+
     load();
-    const timer = window.setInterval(load, 10000);
-    return () => { active = false; window.clearInterval(timer); };
+    timer = window.setInterval(load, 10000);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
   }, [apiUrl, suppliedReadings]);
 
-  const readings = suppliedReadings || fetchedReadings;
-  const displayApiStatus = suppliedReadings ? (dataMode === 'demo' ? 'demo' : (suppliedApiStatus || 'connected')) : apiStatus;
+  const readings = suppliedReadings ?? fetchedReadings;
+
+  const displayApiStatus = suppliedReadings !== undefined && suppliedReadings !== null
+    ? (dataMode === 'demo' ? 'demo' : (suppliedApiStatus || 'connected'))
+    : apiStatus;
+
   const shownUpdatedAt = suppliedLastUpdated || lastUpdated;
+
   const matchedCount = useMemo(() => {
     const lookup = makeReadingLookup(readings);
-    return BUILDINGS.filter((b) => findReading(b, lookup)).length + SPORTS.filter((s) => findReading({ ...s, aliases: s.aliases || [s.name] }, lookup)).length;
+
+    return (
+      BUILDINGS.filter((building) => findReading(building, lookup)).length +
+      SPORTS.filter((sport) =>
+        findReading({ ...sport, aliases: sport.aliases || [sport.name] }, lookup)
+      ).length
+    );
   }, [readings]);
 
   return (
@@ -436,31 +636,96 @@ export default function CampusTwin3D({ readings: suppliedReadings, dataMode = 'd
         <div>
           <div className="ct3d-eyebrow">DSU HAROHALLI · DIGITAL TWIN</div>
           <h1>Campus, in three dimensions.</h1>
-          <p>Explore the campus layout in 3D. Hover over glowing sensor points for resource readings from the selected demo or database source.</p>
+          <p>
+            Explore the campus layout in 3D. Hover over glowing sensor points
+            for resource readings from the selected demo or database source.
+          </p>
         </div>
+
         <div className="ct3d-controls">
-          <span className={`ct3d-status ${displayApiStatus === 'connected' ? 'is-live' : ''}`}><i />{displayApiStatus === 'demo' ? 'DEMO PLAYBACK · SIMULATED' : displayApiStatus === 'connected' ? 'DATABASE CONNECTED' : displayApiStatus === 'connecting' ? 'CONNECTING TO SENSORS' : 'API OFFLINE'}</span>
-          <button type="button" onClick={() => setView('orbit')}>Explore</button>
-          <button type="button" onClick={() => setSelected(null)}>Clear selection</button>
+          <span className={`ct3d-status ${displayApiStatus === 'connected' ? 'is-live' : ''}`}>
+            <i />
+            {displayApiStatus === 'demo'
+              ? 'DEMO PLAYBACK · SIMULATED'
+              : displayApiStatus === 'connected'
+                ? 'DATABASE CONNECTED'
+                : displayApiStatus === 'connecting'
+                  ? 'CONNECTING TO SENSORS'
+                  : 'API OFFLINE'}
+          </span>
+
+          <button type="button" onClick={() => setView('orbit')}>
+            Explore
+          </button>
+
+          <button type="button" onClick={() => setSelected(null)}>
+            Clear selection
+          </button>
         </div>
       </header>
+
       <div className="ct3d-viewer">
-        <div className="ct3d-viewer-note"><span>3D CAMPUS MODEL</span><span>Drag to orbit · Scroll to zoom · Select a building</span></div>
-        <Canvas shadows dpr={[1, 1.8]} camera={{ position: [25, 26, 30], fov: 43 }} gl={{ antialias: true, alpha: false }}>
+        <div className="ct3d-viewer-note">
+          <span>3D CAMPUS MODEL</span>
+          <span>Drag to orbit · Scroll to zoom · Select a building</span>
+        </div>
+
+        <Canvas
+          shadows
+          dpr={[1, 1.8]}
+          camera={{ position: [25, 26, 30], fov: 43 }}
+          gl={{ antialias: true, alpha: false }}
+        >
           <Suspense fallback={null}>
-            <CampusScene readings={readings} selected={selected} setSelected={setSelected} />
+            <CampusScene
+              readings={readings}
+              selected={selected}
+              setSelected={setSelected}
+            />
           </Suspense>
         </Canvas>
+
         <div className="ct3d-compass">N <span>↑</span></div>
-        <div className="ct3d-legend"><span><i className="academic"/>Academic</span><span><i className="residential"/>Hostels & quarters</span><span><i className="sports"/>Sports</span><span><i className="sensor"/>Sensor point</span></div>
+
+        <div className="ct3d-legend">
+          <span><i className="academic" />Academic</span>
+          <span><i className="residential" />Hostels &amp; quarters</span>
+          <span><i className="sports" />Sports</span>
+          <span><i className="sensor" />Sensor point</span>
+        </div>
       </div>
+
       <footer className="ct3d-footer">
-        <div><b>{BUILDINGS.length}</b><span>Buildings / towers</span></div>
-        <div><b>{SPORTS.length}</b><span>Sports facilities</span></div>
-        <div><b>{matchedCount}</b><span>Locations with readings</span></div>
-        <div><b>{shownUpdatedAt ? new Date(shownUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</b><span>Last sensor sync</span></div>
+        <div>
+          <b>{BUILDINGS.length}</b>
+          <span>Buildings / towers</span>
+        </div>
+        <div>
+          <b>{SPORTS.length}</b>
+          <span>Sports facilities</span>
+        </div>
+        <div>
+          <b>{matchedCount}</b>
+          <span>Locations with readings</span>
+        </div>
+        <div>
+          <b>
+            {shownUpdatedAt
+              ? new Date(shownUpdatedAt).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })
+              : '—'}
+          </b>
+          <span>Last sensor sync</span>
+        </div>
       </footer>
-      <p className="ct3d-disclaimer">The 3D geometry is a schematic visualization derived from your existing 2D campus coordinates, not a surveyed architectural model. Demo Playback is simulated for presentation; Database mode reads the configured SQLite API.</p>
+
+      <p className="ct3d-disclaimer">
+        The 3D geometry is a schematic visualization derived from your existing
+        2D campus coordinates, not a surveyed architectural model. Demo Playback
+        is simulated for presentation; Database mode reads the configured SQLite API.
+      </p>
     </section>
   );
 }

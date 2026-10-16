@@ -3,8 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import './StudentIssues.css'
 
 // Use port 8001, where your current Python API is running.
-const API_BASE = 'http://127.0.0.1:8001/api'
-
+const API_BASE = 'https://ecotwin-bkfb.onrender.com/api'
 const ISSUE_CATEGORIES = [
   'Water & plumbing',
   'Electrical',
